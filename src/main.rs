@@ -33,7 +33,7 @@ impl IPv4Iterator {
 			(26,..) | (28,..) | (29,..) | (30,..) | // DoD 26/8, 28/8, 29/8, and 30/8
 			(127,..) | // loopback
 			(224..=239,..) | //multicast
-			(240..=255,..) // useless future use
+			(240..=254,..) // useless future use
 			=> { self.a += 1; return true; }
 			// Second octet
 			(100, Some(64..=127),..) | // CGNAT
@@ -65,6 +65,7 @@ impl Iterator for IPv4Iterator {
 	type Item = String;
 	fn next(&mut self) -> Option<Self::Item> {
 		while self.skips() {}
+		if self.a == 255 { return None; }
 		if self.b.is_none() {
 			self.b = Some(0);
 			return Some(format!("{}.*", self.a));
