@@ -1,5 +1,8 @@
+#[macro_use]
+extern crate clap;
 extern crate crypto;
 extern crate rayon;
+extern crate cidr_utils;
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -7,6 +10,7 @@ use std::io::prelude::*;
 use rayon::prelude::*;
 use crypto::sha1::Sha1;
 use crypto::digest::Digest;
+use cidr_utils::cidr::IpCidr;
 
 struct IPv4Iterator {
 	a: u8,
@@ -89,8 +93,30 @@ impl Iterator for IPv4Iterator {
 	}
 }
 
+fn domain_to_search_list<'a>(input: &'a str) -> Vec<String> {
+	let mut slices: Vec<&str> = input.split('.').collect();
+	let mut output = vec![];
+	slices.retain(|&x| x != "*");
+	while slices.len() > 0 {
+		output.push(format!("*.{}", slices.join(".")));
+		output.push(slices.join("."));
+		slices.remove(0);
+	}
+	output
+}
 
 fn main() -> std::io::Result<()> {
+	let matches = clap_app!(mcbans =>
+		(@setting ArgRequiredElseHelp)
+		(version: crate_version!())
+		(about: "Evaluates the Minecraft server blacklist for domains or IPs")
+		(@arg threads: -j --threads +takes_value "How many threads to parallelize, defaults to # of CPUs")
+		(@arg privateipspace: --allow-private-ip-space "Don't automatically skip non-global IP ranges")
+		(@arg input: * ... "IPv4, IPv4 CIDR range, or domain to evaluate. Can specify multiple matches.")
+	).get_matches();
+
+	rayon::ThreadPoolBuilder::new().num_threads(matches.value_of("threads").unwrap_or("0").parse().unwrap()).build_global().unwrap();
+
 	let mut contents = String::new();
 	{
 		let mut file = File::open("blockedservers")?;
@@ -99,7 +125,35 @@ fn main() -> std::io::Result<()> {
 	let mut hashes: Vec<&str> = contents.split('\n').collect();
 	hashes.sort();
 	//println!("{:?}", hashes);
-	//return Ok(());
+	
+	matches.values_of("input").unwrap().par_bridge().for_each(|thing| {
+		if IpCidr::is_ip_cidr(thing) {
+			let cidr = IpCidr::from_str(thing).unwrap();
+			cidr.iter_as_ip_addr().par_bridge().for_each(|x| {
+				//println!("{:?}", x);
+				let mut hasher = Sha1::new();
+				hasher.input_str(&x.to_string());
+				let hex = hasher.result_str();
+				if let Ok(_) = hashes.binary_search(&hex.as_str()) {
+					println!("{} {}", hex, x);
+				}
+			});
+			println!("it's cidr!");
+		} else {
+			domain_to_search_list(thing).par_iter().for_each(|x| {
+				//println!("{:?}", x);
+				let mut hasher = Sha1::new();
+				hasher.input_str(&x);
+				let hex = hasher.result_str();
+				if let Ok(_) = hashes.binary_search(&hex.as_str()) {
+					println!("{} {}", hex, x);
+				}
+			});
+			println!("nope");
+		}
+	});
+	
+	return Ok(());
 	let mut i = IPv4Iterator::new();
 	i.par_bridge().for_each(|x| {	
 		let mut hasher = Sha1::new();
