@@ -55,7 +55,10 @@ impl IPv4Iterator {
 		if self.d.is_some() && self.d != Some(255) { self.d = Some(self.d.unwrap()+1); }
 		if self.d == Some(255) { self.d = None; self.c = Some(self.c.unwrap()+1); }
 		if self.c == Some(255) { self.c = None; self.b = Some(self.b.unwrap()+1); }
-		if self.b == Some(255) { self.b = None;	self.a +=1; }
+		if self.b == Some(255) {
+			self.b = None;	self.a +=1;
+			println!("Stepped through {}/8", self.a-1);
+		}
 		true
 	}
 
