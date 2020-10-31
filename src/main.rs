@@ -7,10 +7,11 @@ extern crate cidr_utils;
 use std::fs::File;
 use std::io::prelude::*;
 
+use rayon::iter;
 use rayon::prelude::*;
 use crypto::sha1::Sha1;
 use crypto::digest::Digest;
-use cidr_utils::cidr::IpCidr;
+use cidr_utils::cidr::Ipv4Cidr;
 
 struct IPv4Iterator {
 	a: u8,
@@ -127,9 +128,19 @@ fn main() -> std::io::Result<()> {
 	//println!("{:?}", hashes);
 	
 	matches.values_of("input").unwrap().par_bridge().for_each(|thing| {
-		if IpCidr::is_ip_cidr(thing) {
-			let cidr = IpCidr::from_str(thing).unwrap();
-			cidr.iter_as_ip_addr().par_bridge().for_each(|x| {
+		if Ipv4Cidr::is_ipv4_cidr(thing) {
+			let cidr = Ipv4Cidr::from_str(thing).unwrap();
+			iter::split(cidr, |range| {
+				if range.get_bits() == 32 {
+					return (range, None);
+				}
+				let newbits = range.get_bits()+1;
+				let upper = Ipv4Cidr::from_prefix_and_bits(range.get_prefix(), newbits).unwrap();
+				let lower = Ipv4Cidr::from_prefix_and_bits(range.get_prefix()+(1<<(32-newbits)), newbits).unwrap();
+				//println!("split {} into {} and {}", range, upper, lower);
+				(upper, Some(lower))
+			}).for_each(|range| {
+				range.iter_as_ipv4_addr()/*.par_bridge()*/.for_each(|x| {
 				//println!("{:?}", x);
 				let mut hasher = Sha1::new();
 				hasher.input_str(&x.to_string());
@@ -137,6 +148,7 @@ fn main() -> std::io::Result<()> {
 				if let Ok(_) = hashes.binary_search(&hex.as_str()) {
 					println!("{} {}", hex, x);
 				}
+				});
 			});
 			println!("it's cidr!");
 		} else {
