@@ -106,13 +106,17 @@ fn domain_to_search_list<'a>(input: &'a str) -> Vec<String> {
 	output
 }
 
+/*fn cidr_to_wildcard_list(input: Ipv4Cidr) -> Vec<String> {
+
+}*/
+
 fn main() -> std::io::Result<()> {
 	let matches = clap_app!(mcbans =>
 		(@setting ArgRequiredElseHelp)
 		(version: crate_version!())
 		(about: "Evaluates the Minecraft server blacklist for domains or IPs")
 		(@arg threads: -j --threads +takes_value "How many threads to parallelize, defaults to # of CPUs")
-		(@arg privateipspace: --allow-private-ip-space "Don't automatically skip non-global IP ranges")
+		(@arg list: -l --list +takes_value "File containing the hash list to search through")
 		(@arg input: * ... "IPv4, IPv4 CIDR range, or domain to evaluate. Can specify multiple matches.")
 	).get_matches();
 
@@ -120,7 +124,7 @@ fn main() -> std::io::Result<()> {
 
 	let mut contents = String::new();
 	{
-		let mut file = File::open("blockedservers")?;
+		let mut file = File::open(matches.value_of("list").unwrap_or("blockedservers"))?;
 		file.read_to_string(&mut contents)?;
 	}
 	let mut hashes: Vec<&str> = contents.split('\n').collect();
